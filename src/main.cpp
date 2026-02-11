@@ -39,7 +39,8 @@ static const uint32_t LCD_INTERVAL_MS = 250;
 // --- PID для удержания значения потенциометра ---
 static const float POT_SETPOINT = 512.0f; // Целевое значение потенциометра (0..1023)
 // Увеличен PID_KP для более агрессивной реакции (было 8.33)
-static const float PID_KP = 12.0f;
+// Значение 10.0 для баланса между быстротой и стабильностью
+static const float PID_KP = 10.0f;
 static const float PID_KI = 0.5f;
 static const float PID_KD = 0.1f;
 static const float PID_OUTPUT_LIMIT = MAX_SPEED_SPS - BASE_SPEED_SPS;
