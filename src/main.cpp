@@ -21,6 +21,8 @@ static const float BASE_RPM = 180.0f;
 static const float BASE_SPEED_SPS = (BASE_RPM * STEPS_PER_REV) / 60.0f;
 // Ускорение для плавного разгона/торможения (шаги/с²)
 static const float ACCELERATION_SPS2 = 500.0f;
+// Целевая позиция для непрерывного движения (достаточно далеко для непрерывной работы)
+static const long CONTINUOUS_MOVEMENT_STEPS = 1000000L;
 
 // Сглаживание потенциометра
 static const float POT_SMOOTHING = 0.2f;
@@ -129,12 +131,12 @@ void loop() {
   currentSpeed = targetSpeed;
   stepper.setMaxSpeed(targetSpeed);
   
-  // Устанавливаем далёкую целевую позицию для непрерывного движения
   // Используем run() вместо runSpeed() для плавного ускорения
+  // Устанавливаем далёкую целевую позицию, чтобы двигатель двигался непрерывно
+  // с управляемым ускорением. Это предотвращает вибрацию при высоких частотах.
   if (targetSpeed > 0.0f) {
     if (stepper.distanceToGo() == 0) {
-      // Устанавливаем новую целевую позицию далеко вперёд
-      stepper.moveTo(stepper.currentPosition() + 1000000L);
+      stepper.moveTo(stepper.currentPosition() + CONTINUOUS_MOVEMENT_STEPS);
     }
     stepper.run();
   } else {
