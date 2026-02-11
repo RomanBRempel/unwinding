@@ -15,8 +15,11 @@ LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 // --- НАСТРОЙКИ ДВИЖЕНИЯ ---
 static const uint8_t MICROSTEPS = 8;
 static const float STEPS_PER_REV = 200.0f * MICROSTEPS;
+<<<<<<< Updated upstream
 // Максимальная скорость в RPM (обороты в минуту)
 // Для скоростей выше 300 RPM рекомендуется использовать микрошаги (MICROSTEPS > 1)
+=======
+>>>>>>> Stashed changes
 static const float MAX_RPM = 600.0f;
 static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
 static const float BASE_RPM = 180.0f;
@@ -31,8 +34,8 @@ static const long CONTINUOUS_MOVEMENT_STEPS = 1000000L;
 // Сглаживание потенциометра
 static const float POT_SMOOTHING = 0.2f;
 static const uint32_t CONTROL_INTERVAL_MS = 10;
-static const uint32_t SPEED_SAMPLE_MS = 100;
-static const uint32_t LCD_INTERVAL_MS = 250;
+static const uint32_t SPEED_SAMPLE_MS = 50;
+static const uint32_t LCD_INTERVAL_MS = 600;
 
 // --- PID для удержания значения потенциометра ---
 static const float POT_SETPOINT = 512.0f; // Целевое значение потенциометра (0..1023)
@@ -146,8 +149,7 @@ void loop() {
   } else {
     // Если целевая скорость 0, останавливаемся
     stepper.stop();
-    stepper.run();
-  }
+    }
 
   if (now - lastSpeedSample >= SPEED_SAMPLE_MS) {
     long currentPos = stepper.currentPosition();
