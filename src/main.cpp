@@ -20,7 +20,8 @@ static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
 static const float BASE_RPM = 180.0f;
 static const float BASE_SPEED_SPS = (BASE_RPM * STEPS_PER_REV) / 60.0f;
 // Ускорение для плавного разгона/торможения (шаги/с²)
-static const float ACCELERATION_SPS2 = 500.0f;
+// Увеличено до 2000 для поддержки высоких скоростей (300+ RPM)
+static const float ACCELERATION_SPS2 = 2000.0f;
 // Целевая позиция для непрерывного движения (достаточно далеко для непрерывной работы)
 static const long CONTINUOUS_MOVEMENT_STEPS = 1000000L;
 
