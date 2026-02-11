@@ -2,128 +2,159 @@
 #include <AccelStepper.h>
 #include <LiquidCrystal.h>
 
-// --- Hardware pins ---
-static const uint8_t POT_PIN = A15; // potentiometer must be on analog pin (A0-A15 on Mega)
+// --- ПИНЫ ---
+static const uint8_t POT_PIN = A15;
 static const uint8_t ENABLE_PIN = 28;
 static const uint8_t DIR_PIN = 30;
 static const uint8_t STEP_PIN = 32;
 
-// LCD Keypad Shield (standard wiring)
-static const uint8_t LCD_RS = 8;
-static const uint8_t LCD_EN = 9;
-static const uint8_t LCD_D4 = 4;
-static const uint8_t LCD_D5 = 5;
-static const uint8_t LCD_D6 = 6;
-static const uint8_t LCD_D7 = 7;
-
+// LCD
+static const uint8_t LCD_RS = 8, LCD_EN = 9, LCD_D4 = 4, LCD_D5 = 5, LCD_D6 = 6, LCD_D7 = 7;
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+
+// --- НАСТРОЙКИ ДВИЖЕНИЯ ---
+static const uint8_t MICROSTEPS = 1;
+static const float STEPS_PER_REV = 200.0f * MICROSTEPS;
+static const float MAX_RPM = 300.0f;
+static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
+static const float BASE_RPM = 180.0f;
+static const float BASE_SPEED_SPS = (BASE_RPM * STEPS_PER_REV) / 60.0f;
+
+// Сглаживание потенциометра
+static const float POT_SMOOTHING = 0.2f;
+static const uint32_t CONTROL_INTERVAL_MS = 10;
+static const uint32_t SPEED_SAMPLE_MS = 100;
+static const uint32_t LCD_INTERVAL_MS = 250;
+
+// --- PID для удержания значения потенциометра ---
+static const float POT_SETPOINT = 512.0f; // Целевое значение потенциометра (0..1023)
+static const float PID_KP = 8.33f;
+static const float PID_KI = 0.5f;
+static const float PID_KD = 0.1f;
+static const float PID_OUTPUT_LIMIT = MAX_SPEED_SPS - BASE_SPEED_SPS;
+static const int POT_HOLD_BAND = 5; // Зона удержания без движения
+static const int POT_STOP_THRESHOLD = 5; // Если потенциометр около 0 - стоп
+
+// --- AccelStepper объект ---
 AccelStepper stepper(AccelStepper::DRIVER, STEP_PIN, DIR_PIN);
 
-// --- Control parameters ---
-static const float STEPS_PER_REV = 200.0f;      // NEMA23 full-step
-static const float TARGET_RPM_AT_MID = 177.0f;  // desired speed at pot=512
-static const float TARGET_STEPS_PER_SEC = (TARGET_RPM_AT_MID * STEPS_PER_REV) / 60.0f;
-static const float MAX_SPEED = TARGET_STEPS_PER_SEC * 2.0f; // linear map 0..1023
-static const uint32_t LCD_PERIOD_MS = 500;
-static const float ACCELERATION = 2000.0f; // steps/sec^2 for smooth ramp
-static const long RUN_DISTANCE = 1000000L; // large target for continuous motion
-static const float POT_FILTER_ALPHA = 0.1f; // low-pass filter for pot noise
-static const int POT_DEADBAND = 4;          // ignore tiny jitters around zero
-static const float SPEED_SLEW_PER_SEC = 800.0f; // limit speed change rate
-
-// --- State ---
-int lastInput = 0;
-float filteredInput = 0.0f;
+// --- Глобальные переменные ---
+float smoothedPot = 0.0f;
+uint32_t lastLcdUpdate = 0;
 float currentSpeed = 0.0f;
-uint32_t lastControlMs = 0;
-uint32_t lastLcdMs = 0;
-
-int readPotValue() {
-  // Analog read. If using analog pin, set POT_PIN to A0..A15.
-  return analogRead(POT_PIN);
-}
-
-void applySpeed(float speed) {
-  if (speed <= 0.0f) {
-    stepper.stop();
-    return;
-  }
-  stepper.enableOutputs();
-  stepper.setMaxSpeed(speed);
-  if (stepper.distanceToGo() == 0) {
-    stepper.moveTo(stepper.currentPosition() + RUN_DISTANCE);
-  }
-}
+float targetSpeed = 0.0f;
+float pidIntegral = 0.0f;
+float pidLastError = 0.0f;
+uint32_t lastPidTime = 0;
+uint32_t lastControlUpdate = 0;
+long lastStepPos = 0;
+uint32_t lastSpeedSample = 0;
+float actualSpeedSps = 0.0f;
 
 void setup() {
-  Serial.begin(115200);
-
-  stepper.setEnablePin(ENABLE_PIN);
-  stepper.setPinsInverted(false, false, true); // enable is active-low on most drivers
-  stepper.setMinPulseWidth(3); // TB6600 needs a few microseconds pulse width
-  stepper.setMaxSpeed(MAX_SPEED);
-  stepper.setAcceleration(ACCELERATION);
-  stepper.enableOutputs();
-
   lcd.begin(16, 2);
   lcd.clear();
-  lcd.print("Unwinding");
+  lcd.print("Direct Control");
   lcd.setCursor(0, 1);
   lcd.print("Init...");
 
-  lastInput = readPotValue();
-  lastControlMs = millis();
-  delay(500);
+  // Инициализация
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, LOW);
+  
+  stepper.setMaxSpeed(MAX_SPEED_SPS);
+  
+  // Инициализация сглаженного значения
+  smoothedPot = analogRead(POT_PIN);
+  
+  delay(1000);
+  lcd.clear();
 }
 
 void loop() {
   const uint32_t now = millis();
+  
+  if (now - lastControlUpdate >= CONTROL_INTERVAL_MS) {
+    lastControlUpdate = now;
+    // --- ЧТЕНИЕ И СГЛАЖИВАНИЕ ПОТЕНЦИОМЕТРА ---
+    int rawInput = analogRead(POT_PIN);
+    smoothedPot = (POT_SMOOTHING * rawInput) + ((1.0f - POT_SMOOTHING) * smoothedPot);
 
-  // Control loop at ~50 Hz
-  if (now - lastControlMs >= 20) {
-    const uint32_t dtMs = now - lastControlMs;
-    lastControlMs = now;
-    const float dt = dtMs / 1000.0f;
+    // --- PID УДЕРЖАНИЕ ПОТЕНЦИОМЕТРА ---
+    float error = smoothedPot - POT_SETPOINT;
 
-    const int input = readPotValue();
-    lastInput = input;
-
-    filteredInput += (static_cast<float>(input) - filteredInput) * POT_FILTER_ALPHA;
-
-    float desiredSpeed = 0.0f;
-    if (filteredInput > POT_DEADBAND) {
-      const float ratio = filteredInput / 1023.0f;
-      desiredSpeed = ratio * MAX_SPEED;
-      if (desiredSpeed > MAX_SPEED) desiredSpeed = MAX_SPEED;
-    }
-
-    const float maxDelta = SPEED_SLEW_PER_SEC * dt;
-    if (desiredSpeed > currentSpeed + maxDelta) {
-      currentSpeed += maxDelta;
-    } else if (desiredSpeed < currentSpeed - maxDelta) {
-      currentSpeed -= maxDelta;
+    if (smoothedPot <= POT_STOP_THRESHOLD) {
+      targetSpeed = 0.0f;
+      pidIntegral = 0.0f;
+      pidLastError = 0.0f;
+      lastPidTime = now;
+    } else if (abs((int)error) <= POT_HOLD_BAND) {
+      targetSpeed = BASE_SPEED_SPS;
+      pidIntegral = 0.0f;
+      pidLastError = 0.0f;
+      lastPidTime = now;
     } else {
-      currentSpeed = desiredSpeed;
-    }
+      if (lastPidTime == 0) {
+        lastPidTime = now;
+      }
 
-    applySpeed(currentSpeed);
+      float dt = (now - lastPidTime) / 1000.0f;
+      if (dt > 0.0f) {
+        pidIntegral += error * dt;
+
+        if (PID_KI > 0.0f) {
+          float integralLimit = PID_OUTPUT_LIMIT / PID_KI;
+          if (pidIntegral > integralLimit) pidIntegral = integralLimit;
+          if (pidIntegral < -integralLimit) pidIntegral = -integralLimit;
+        }
+
+        float derivative = (error - pidLastError) / dt;
+        float output = (PID_KP * error) + (PID_KI * pidIntegral) + (PID_KD * derivative);
+
+        if (output > PID_OUTPUT_LIMIT) output = PID_OUTPUT_LIMIT;
+        if (output < -BASE_SPEED_SPS) output = -BASE_SPEED_SPS;
+
+        targetSpeed = BASE_SPEED_SPS + output;
+        if (targetSpeed < 0.0f) targetSpeed = 0.0f;
+        if (targetSpeed > MAX_SPEED_SPS) targetSpeed = MAX_SPEED_SPS;
+        pidLastError = error;
+        lastPidTime = now;
+      }
+    }
   }
 
-  // Run stepper with acceleration
-  stepper.run();
+  currentSpeed = targetSpeed;
+  stepper.setSpeed(targetSpeed);
 
-  // LCD update (keep it slow to avoid stalling steps)
-  if (now - lastLcdMs >= LCD_PERIOD_MS) {
-    lastLcdMs = now;
-    const int input = lastInput;
+  // Обязательно вызывать каждый цикл
+  stepper.runSpeed();
 
+  if (now - lastSpeedSample >= SPEED_SAMPLE_MS) {
+    long currentPos = stepper.currentPosition();
+    long deltaSteps = currentPos - lastStepPos;
+    float dt = (now - lastSpeedSample) / 1000.0f;
+    if (dt > 0.0f) {
+      actualSpeedSps = deltaSteps / dt;
+    }
+    lastStepPos = currentPos;
+    lastSpeedSample = now;
+  }
+  
+  // --- ОБНОВЛЕНИЕ LCD ---
+ if (now - lastLcdUpdate >= LCD_INTERVAL_MS) {
+    lastLcdUpdate = now;
+    
+    int rpmActual = abs((int)((actualSpeedSps * 60.0f) / STEPS_PER_REV));
+    int rpmTarget = abs((int)((currentSpeed * 60.0f) / STEPS_PER_REV));
     char line0[17];
-    const int speed = static_cast<int>(stepper.speed());
-    snprintf(line0, sizeof(line0), "P:%4d S:%4d", input, speed);
+    char line1[17];
+    
     lcd.setCursor(0, 0);
+    snprintf(line0, sizeof(line0), "T:%4d A:%4d   ", rpmTarget, rpmActual);
     lcd.print(line0);
 
     lcd.setCursor(0, 1);
-    lcd.print("RUN             ");
-  }
+    snprintf(line1, sizeof(line1), "P:%4d SP:%4d  ", (int)smoothedPot, (int)POT_SETPOINT);
+    lcd.print(line1);
+  } 
 }
