@@ -29,14 +29,17 @@ static const float ACCELERATION_SPS2 = 2000.0f;
 static const long CONTINUOUS_MOVEMENT_STEPS = 1000000L;
 
 // Сглаживание потенциометра
-static const float POT_SMOOTHING = 0.2f;
-static const uint32_t CONTROL_INTERVAL_MS = 10;
+// Увеличено до 0.5 для более быстрой реакции на изменения (было 0.2)
+static const float POT_SMOOTHING = 0.5f;
+// Уменьшено до 5мс для более частых обновлений (было 10мс)
+static const uint32_t CONTROL_INTERVAL_MS = 5;
 static const uint32_t SPEED_SAMPLE_MS = 100;
 static const uint32_t LCD_INTERVAL_MS = 250;
 
 // --- PID для удержания значения потенциометра ---
 static const float POT_SETPOINT = 512.0f; // Целевое значение потенциометра (0..1023)
-static const float PID_KP = 8.33f;
+// Увеличен PID_KP для более агрессивной реакции (было 8.33)
+static const float PID_KP = 12.0f;
 static const float PID_KI = 0.5f;
 static const float PID_KD = 0.1f;
 static const float PID_OUTPUT_LIMIT = MAX_SPEED_SPS - BASE_SPEED_SPS;
