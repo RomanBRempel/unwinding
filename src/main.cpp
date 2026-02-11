@@ -22,9 +22,9 @@ static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
 static const float BASE_RPM = 180.0f;
 static const float BASE_SPEED_SPS = (BASE_RPM * STEPS_PER_REV) / 60.0f;
 // Ускорение для плавного разгона/торможения (шаги/с²)
-// Увеличено до 2000 для поддержки высоких скоростей (300+ RPM)
-// Для ещё больших скоростей можно увеличить до 3000-5000
-static const float ACCELERATION_SPS2 = 2000.0f;
+// Увеличено до 16000 для поддержки высоких скоростей с микрошагами (MICROSTEPS=8)
+// При MICROSTEPS=8 нужно 8x больше ускорения для той же скорости разгона в RPM
+static const float ACCELERATION_SPS2 = 16000.0f;
 // Целевая позиция для непрерывного движения (достаточно далеко для непрерывной работы)
 static const long CONTINUOUS_MOVEMENT_STEPS = 1000000L;
 
@@ -149,7 +149,8 @@ void loop() {
   } else {
     // Если целевая скорость 0, останавливаемся
     stepper.stop();
-    }
+    stepper.run();
+  }
 
   if (now - lastSpeedSample >= SPEED_SAMPLE_MS) {
     long currentPos = stepper.currentPosition();
