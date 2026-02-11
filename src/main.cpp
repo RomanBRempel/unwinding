@@ -19,6 +19,8 @@ static const float MAX_RPM = 300.0f;
 static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
 static const float BASE_RPM = 180.0f;
 static const float BASE_SPEED_SPS = (BASE_RPM * STEPS_PER_REV) / 60.0f;
+// Ускорение для плавного разгона/торможения (шаги/с²)
+static const float ACCELERATION_SPS2 = 500.0f;
 
 // Сглаживание потенциометра
 static const float POT_SMOOTHING = 0.2f;
@@ -63,6 +65,7 @@ void setup() {
   digitalWrite(ENABLE_PIN, LOW);
   
   stepper.setMaxSpeed(MAX_SPEED_SPS);
+  stepper.setAcceleration(ACCELERATION_SPS2);
   
   // Инициализация сглаженного значения
   smoothedPot = analogRead(POT_PIN);
@@ -124,10 +127,21 @@ void loop() {
   }
 
   currentSpeed = targetSpeed;
-  stepper.setSpeed(targetSpeed);
-
-  // Обязательно вызывать каждый цикл
-  stepper.runSpeed();
+  stepper.setMaxSpeed(targetSpeed);
+  
+  // Устанавливаем далёкую целевую позицию для непрерывного движения
+  // Используем run() вместо runSpeed() для плавного ускорения
+  if (targetSpeed > 0.0f) {
+    if (stepper.distanceToGo() == 0) {
+      // Устанавливаем новую целевую позицию далеко вперёд
+      stepper.moveTo(stepper.currentPosition() + 1000000L);
+    }
+    stepper.run();
+  } else {
+    // Если целевая скорость 0, останавливаемся
+    stepper.stop();
+    stepper.run();
+  }
 
   if (now - lastSpeedSample >= SPEED_SAMPLE_MS) {
     long currentPos = stepper.currentPosition();
