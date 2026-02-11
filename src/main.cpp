@@ -15,14 +15,8 @@ LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 // --- НАСТРОЙКИ ДВИЖЕНИЯ ---
 static const uint8_t MICROSTEPS = 8;
 static const float STEPS_PER_REV = 200.0f * MICROSTEPS;
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
 // Максимальная скорость в RPM (обороты в минуту)
 // Для скоростей выше 300 RPM рекомендуется использовать микрошаги (MICROSTEPS > 1)
-=======
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 static const float MAX_RPM = 600.0f;
 static const float MAX_SPEED_SPS = (MAX_RPM * STEPS_PER_REV) / 60.0f;
 static const float BASE_RPM = 180.0f;
