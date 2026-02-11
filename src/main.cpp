@@ -122,8 +122,9 @@ void loop() {
         float derivative = (error - pidLastError) / dt;
         float output = (PID_KP * error) + (PID_KI * pidIntegral) + (PID_KD * derivative);
 
+        // Ограничение выхода PID для симметричного ускорения и замедления
         if (output > PID_OUTPUT_LIMIT) output = PID_OUTPUT_LIMIT;
-        if (output < -BASE_SPEED_SPS) output = -BASE_SPEED_SPS;
+        if (output < -PID_OUTPUT_LIMIT) output = -PID_OUTPUT_LIMIT;
 
         targetSpeed = BASE_SPEED_SPS + output;
         if (targetSpeed < 0.0f) targetSpeed = 0.0f;
